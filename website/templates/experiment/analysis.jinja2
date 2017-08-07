@@ -16,17 +16,19 @@
   {% endif %}
 </div>
 <br>
-{{ plot_div|indent(4)|safe }}
+{% for div in plot_div %}
+    {{ div }}
+{% endfor %}
 <p>
 <form method="get" class="form" >
    <div class="form-group">
-      <label for="variable">Variable:</label>
-      <select class="form-control" name="variable" onchange="this.form.submit()">
-      {% for dim in experiment.dimensions.all() %}
-      <option {% if selected_dim == loop.index0 %}selected{% endif %} value={{ loop.index0 }}>{{ dim.name }}</option>
-      {% endfor %}
+      <label for="sortby">Sort by:</label>
+      <select class="form-control" name="sortby" onchange="this.form.submit()">
+        <option {% if selected_sortby == "target" %}selected{% endif %}
+            value="target">target</option>
+        <option {% if selected_sortby == "id" %}selected{% endif %}
+            value="observation">observation id</option>
       </select>
    </div>
 </form>
 </p>
-

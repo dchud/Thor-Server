@@ -12,6 +12,7 @@ from flask_login import login_required, current_user
 from flask_api import status
 # Bokeh imports.
 from bokeh.embed import components
+from bokeh.models import HoverTool
 from bokeh.plotting import figure
 from bokeh.resources import INLINE
 from bokeh.util.string import encode_utf8
@@ -82,6 +83,31 @@ def history_page(name):
             experiment=experiment
         )
 
+
+def make_fig(x, y, x_axis_label="", y_axis_label="", dim_type="linear",
+             title="", plot_height=225):
+    """Create and return a figure for the given dimension."""
+    hover = HoverTool(tooltips=[
+        ("id (??)", "$index"),
+        ("value", "$x"),
+        ("target", "$y"),
+        ])
+    fig = figure(
+        title=title,
+        tools=[hover],
+        plot_height=plot_height,
+        responsive=True,
+        x_axis_label=x_axis_label,
+        x_axis_type="linear",
+        y_axis_label=y_axis_label,
+        y_axis_type="log" if dim_type == "logarithmic" else "linear"
+    )
+    fig.circle(x, y)
+    fig.xaxis.visible = False
+    fig.toolbar.logo = None
+    return fig
+
+
 @experiment.route("/experiment/<string:name>/analysis/")
 @login_required
 def analysis_page(name):
@@ -91,41 +117,50 @@ def analysis_page(name):
     ).first()
     # Grab the inputs arguments from the URL.
     args = request.args
-    # Variable selector for analysis.
-    selected_dim = int(args.get("variable", 0))
+    # Sort selector for analysis, only two allowed values.
+    selected_sortby = args.get("sortby", "target")
+    if selected_sortby == "observation":
+        selected_sortby = "id"
+    else:
+        selected_sortby = "target"
 
     if experiment:
         dims = experiment.dimensions.all()
         if experiment.observations.filter_by(pending=False).count() > 1:
             obs = experiment.observations.filter_by(
                 pending=False
-            ).order_by("date").all()
+            ).order_by(selected_sortby).all()
+            # squeeze three or more dimensions, otherwise stick to 225
+            prop_height = 700 // (len(dims) + 1)
+            if prop_height < 225:
+                plot_height = prop_height
+            else:
+                plot_height = 225
             # Extract best observation so far.
             X, y = decode_recommendation(obs, dims)
-            d = dims[selected_dim]
+            # d = dims[selected_dim]
             # Visualize.
-            fig = figure(
-                title="Metric vs. Variable Scatter",
-                tools="pan,box_zoom,reset",
-                plot_height=225,
-                responsive=True,
-                x_axis_label="Variable",
-                x_axis_type="log" if d.dim_type == "logarithmic" else "linear"
-            )
-            fig.circle(X[:, selected_dim], y)
-            fig.toolbar.logo = None
-            script, div = components(fig)
+            figs = [make_fig(range(len(X)), X[:, dims.index(d)],
+                             x_axis_label="", y_axis_label=d.name,
+                             dim_type=d.dim_type, plot_height=plot_height)
+                    for d in dims]
+            title = "Objective value, sorted by {}".format(selected_sortby)
+            figs.insert(0, make_fig(range(len(X)), [o.target for o in obs],
+                                    x_axis_label="", y_axis_label="target",
+                                    dim_type="linear", plot_height=plot_height,
+                                    title=title))
+            script, divs = components(figs)
         else:
-            script, div = "", ""
+            script, divs = "", [""]
 
         return encode_utf8(
             render_template(
                 "experiment.jinja2",
                 tab="analysis",
-                selected_dim=selected_dim,
+                selected_sortby=selected_sortby,
                 experiment=experiment,
                 plot_script=script,
-                plot_div=div,
+                plot_div=divs,
                 js_resources=js_resources,
                 css_resources=css_resources,
             )
