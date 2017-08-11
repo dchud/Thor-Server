@@ -87,13 +87,9 @@ def history_page(experiment_id):
 
 
 def make_fig(x, y, x_axis_label="", y_axis_label="", dim_type="linear",
-             title="", plot_height=225):
+             title="", plot_height=225, tooltips=[]):
     """Create and return a figure for the given dimension."""
-    hover = HoverTool(tooltips=[
-        ("id (??)", "$index"),
-        ("value", "$x"),
-        ("target", "$y"),
-        ])
+    hover = HoverTool(tooltips=tooltips)
     fig = figure(
         title=title,
         tools=[hover],
@@ -110,7 +106,7 @@ def make_fig(x, y, x_axis_label="", y_axis_label="", dim_type="linear",
     return fig
 
 
-@experiment.route("/experiment/<string:name>/analysis/")
+@experiment.route("/experiment/<int:experiment_id>/analysis/")
 @login_required
 def analysis_page(experiment_id):
     # Query for the corresponding experiment.
@@ -123,8 +119,14 @@ def analysis_page(experiment_id):
     selected_sortby = args.get("sortby", "target")
     if selected_sortby == "observation":
         selected_sortby = "id"
+        tooltips = [
+            ("parameter value", "@y"),
+            ]
     else:
         selected_sortby = "target"
+        tooltips = [
+            ("parameter value", "@y"),
+            ]
 
     if experiment:
         dims = experiment.dimensions.all()
@@ -144,13 +146,17 @@ def analysis_page(experiment_id):
             # Visualize.
             figs = [make_fig(range(len(X)), X[:, dims.index(d)],
                              x_axis_label="", y_axis_label=d.name,
-                             dim_type=d.dim_type, plot_height=plot_height)
+                             dim_type=d.dim_type,
+                             plot_height=plot_height,
+                             tooltips=tooltips)
                     for d in dims]
             title = "Objective value, sorted by {}".format(selected_sortby)
             figs.insert(0, make_fig(range(len(X)), [o.target for o in obs],
                                     x_axis_label="", y_axis_label="target",
                                     dim_type="linear", plot_height=plot_height,
-                                    title=title))
+                                    title=title, tooltips=[
+                                        ("target", "@y")
+                                    ]))
             script, divs = components(figs)
         else:
             script, divs = "", [""]
